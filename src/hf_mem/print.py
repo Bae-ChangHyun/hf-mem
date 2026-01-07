@@ -1,5 +1,5 @@
 import warnings
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from hf_mem.metadata import SafetensorsMetadata
 
@@ -114,6 +114,7 @@ def print_report(
     revision: str,
     metadata: SafetensorsMetadata,
     ignore_table_width: bool = False,
+    gpu_memories: Optional[List[float]] = None,
 ) -> None:
     rows = [
         "INFERENCE MEMORY ESTIMATE FOR",
@@ -189,5 +190,23 @@ def print_report(
                 bar,
                 current_len,
             )
+
+    # GPU compatibility section
+    if gpu_memories:
+        _print_divider(current_len + 1, "top-continue")
+        _print_centered("GPU COMPATIBILITY", current_len)
+        _print_divider(current_len + 1, "top")
+
+        model_gb = _bytes_to_gb(metadata.bytes_count)
+        single_gpu_mem = gpu_memories[0]
+        num_gpus = len(gpu_memories)
+
+        for i in range(1, num_gpus + 1):
+            total_mem = single_gpu_mem * i
+            fits = model_gb <= total_mem
+            icon = "\u2705" if fits else "\u274c"
+            gpu_label = f"{icon} {i}x GPU"
+            mem_text = f"{total_mem:.2f} GB"
+            _print_row(gpu_label, mem_text, current_len)
 
     _print_divider(current_len + 1, "bottom")

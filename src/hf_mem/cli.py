@@ -3,11 +3,32 @@ import asyncio
 import json
 import os
 import struct
+import subprocess
 from dataclasses import asdict
 from functools import reduce
 from typing import Any, Dict, List, Optional
 
 import httpx
+
+
+def get_gpu_memory() -> Optional[List[float]]:
+    """Get GPU memory in GB using nvidia-smi. Returns None if no GPU available."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        memories = []
+        for line in result.stdout.strip().split("\n"):
+            if line:
+                memories.append(float(line) / 1024)  # MiB to GB
+        return memories if memories else None
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        return None
 
 from hf_mem.metadata import parse_safetensors_metadata
 from hf_mem.print import print_report
@@ -193,8 +214,12 @@ async def run(
             "NONE OF `model.safetensors`, `model.safetensors.index.json`, `model_index.json` HAS BEEN FOUND"
         )
 
+    gpu_memories = get_gpu_memory()
+
     if json_output:
         out = {"model_id": model_id, "revision": revision, **asdict(metadata)}
+        if gpu_memories:
+            out["gpu_memories_gb"] = gpu_memories
         print(json.dumps(out))
     else:
         print_report(
@@ -202,6 +227,7 @@ async def run(
             revision=revision,
             metadata=metadata,
             ignore_table_width=ignore_table_width,
+            gpu_memories=gpu_memories,
         )
 
 
